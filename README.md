@@ -43,14 +43,25 @@ graph TD
     A[AI Agent / LLM] -->|Executes Tool| B(AegisShield Middleware)
     B -->|Pre-flight Check| C{Security Scanner}
     
+    %% Pre-flight Blocked Path
     C -->|Violates Policy| D[Execution Blocked]
+    D -->|Return Policy Error| A
+    D -->|Log Block Event| H[(Immutable Audit Ledger)]
+    
+    %% Pre-flight Passed Path
     C -->|Passes Policy| E[Execute Tool Code]
+    E -->|Raw Output| F{Real-Time Redaction Engine}
     
-    E -->|Raw Output| F[Real-Time Redaction Engine]
+    %% Redaction Paths
     F -->|Detects Secrets| G[Sanitized Output]
+    F -->|No Secrets| I[Clean Output]
     
+    %% Returning to Agent
     G -->|Safe Context Return| A
-    F -->|Event Log| H[(Immutable Audit Ledger)]
+    I -->|Safe Context Return| A
+    
+    %% Audit Logging for Outputs
+    F -->|Log Redaction Event| H
 ```
 
 ---
