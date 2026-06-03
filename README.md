@@ -155,6 +155,55 @@ curl -X POST http://localhost:3000/api/wrapper/redact \
 
 ---
 
+## AI Framework Integration
+
+AegisShield acts as a zero-trust middleware between your tool executions and the LLM context. 
+
+### Python / LangChain Example
+
+Wrap your existing tools with AegisShield before returning data to the agent:
+
+```python
+import requests
+from langchain.tools import tool
+
+def aegis_shield_wrapper(tool_output: str) -> str:
+    response = requests.post(
+        "http://localhost:3000/api/wrapper/redact", 
+        json={"text": tool_output}
+    )
+    return response.json().get("output", tool_output)
+
+@tool
+def execute_unsafe_query(query: str) -> str:
+    """Executes a local command or query."""
+    raw_output = run_local_task(query)
+    
+    # 🛡️ Sanitize the output before returning to the LLM
+    return aegis_shield_wrapper(raw_output)
+```
+
+### OpenAI Function Calling (Native)
+
+When processing OpenAI tool calls, pipe the function result through AegisShield before appending the `tool` message back to your history:
+
+```python
+# 1. Execute the requested tool locally
+raw_result = execute_tool(tool_call.function.name, args)
+
+# 2. 🛡️ Sanitize the output with AegisShield
+safe_result = aegis_shield_wrapper(raw_result)
+
+# 3. Return the sanitized context to the LLM
+messages.append({
+    "role": "tool",
+    "tool_call_id": tool_call.id,
+    "content": safe_result
+})
+```
+
+---
+
 ## Technology Stack
 
 - **Core:** [Next.js 16](https://nextjs.org/)
