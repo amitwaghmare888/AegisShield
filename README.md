@@ -41,19 +41,21 @@ We provide a zero-trust wrapper that sanitizes tool outputs in microseconds, ens
 ```mermaid
 graph TD
     A[AI Agent / LLM] -->|Executes Tool| B(AegisShield Middleware)
-    B -->|Pre-flight Check| C{Security Scanner}
+    B -->|Pre-flight Check| C{AI Deep Scanner}
     
     %% Pre-flight Blocked Path
     C -->|Violates Policy| D[Execution Blocked]
+    D -->|Generate Patch| J(AI Auto-Fix Engine)
+    J -->|Return Safe Code| C
     D -->|Return Policy Error| A
     D -->|Log Block Event| H[(Immutable Audit Ledger)]
     
     %% Pre-flight Passed Path
     C -->|Passes Policy| E[Execute Tool Code]
-    E -->|Raw Output| F{Real-Time Redaction Engine}
+    E -->|Raw Output| F{AI Redaction Engine}
     
     %% Redaction Paths
-    F -->|Detects Secrets| G[Sanitized Output]
+    F -->|Semantic Redaction| G[Sanitized Output]
     F -->|No Secrets| I[Clean Output]
     
     %% Returning to Agent
@@ -62,6 +64,9 @@ graph TD
     
     %% Audit Logging for Outputs
     F -->|Log Redaction Event| H
+    
+    %% AI Threat Reporting
+    H -->|Analyze Findings| K(AI Executive Summary)
 ```
 
 ---
