@@ -809,25 +809,43 @@ export default function Home() {
     }
   }
 
-  async function loadScanSample() {
-    if (!currentScan?.scan_id) {
+  function loadScanSample() {
+    if (!currentScan) {
       setWrapSummary('No active scan to pull from');
       return;
     }
-    setWrapSummary('Loading sample…');
-    try {
-      const r = await fetch(`/api/wrapper/sample/${encodeURIComponent(currentScan.scan_id)}`);
-      const j = await r.json();
-      if (j.text) {
-        setWrapInput(j.text);
-        setWrapInStat(`${j.text.length} chars`);
-        setWrapSummary(j.from_scan ? 'Loaded from your scan' : 'Sample loaded');
+
+    // Try client-side raw code first (works on Vercel where server memory is ephemeral)
+    if (rawCodeRef.current) {
+      const lines = rawCodeRef.current.split('\n');
+      const findingLines = currentScan.findings.map(f => f.line).filter(Boolean);
+      let text: string;
+      if (findingLines.length > 0) {
+        const start = Math.max(0, Math.min(...findingLines) - 3);
+        const end = Math.min(lines.length, Math.max(...findingLines) + 3);
+        text = lines.slice(start, end).join('\n');
       } else {
-        setWrapSummary('Scan has no usable snippets');
+        text = lines.slice(0, 20).join('\n');
       }
-    } catch {
-      setWrapSummary('Could not load sample');
+      setWrapInput(text);
+      setWrapInStat(`${text.length} chars`);
+      setWrapSummary('Loaded from your scan');
+      return;
     }
+
+    // Fallback: build from findings snippets
+    if (currentScan.findings.length > 0) {
+      const text = currentScan.findings
+        .slice(0, 5)
+        .map(f => `# ${f.file}:${f.line}\n${f.snippet}`)
+        .join('\n\n');
+      setWrapInput(text);
+      setWrapInStat(`${text.length} chars`);
+      setWrapSummary('Loaded from scan findings');
+      return;
+    }
+
+    setWrapSummary('Scan has no usable snippets');
   }
 
   /* ── Contact form submit ── */
