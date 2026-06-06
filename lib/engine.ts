@@ -501,7 +501,7 @@ export function redactText(text: string): { output: string; redactions: number }
     const freshPattern = new RegExp(rule.pattern.source, rule.pattern.flags);
     output = output.replace(freshPattern, () => {
       redactions++;
-      return '[REDACTED by AegisShield]';
+      return '[REDACTED]';
     });
   }
 

@@ -1,42 +1,35 @@
 <div align="center">
+  <img src="public/window.svg" alt="AegisShield Logo" width="80" height="80" />
+  <h1>AegisShield</h1>
+  <p><strong>Enterprise Security Middleware for Agentic AI</strong></p>
+  <p>Runtime supply-chain security with real-time risk scores and redaction for third-party agent skills.</p>
 
-<img src="public/logo.png" alt="AegisShield Logo" width="120" height="120" />
-
-# AegisShield
-
-**Enterprise Security Middleware for Agentic AI**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
-[![Security: Enterprise](https://img.shields.io/badge/Security-Enterprise%20Grade-success)](#)
-[![Status: Active](https://img.shields.io/badge/Status-Active-brightgreen)](#)
-
-> **Real-time supply-chain security, risk scoring, and zero-trust redaction for third-party AI agent skills.**
-
-[Features](#key-capabilities) • [Architecture](#system-architecture) • [Quick Start](#quick-start) • [API Integration](#api-integration)
-
+  <p>
+    <a href="#features">Features</a> •
+    <a href="#getting-started">Getting Started</a> •
+    <a href="#usage">Usage</a> •
+    <a href="#api-reference">API</a>
+  </p>
 </div>
 
 ---
 
-## The Problem: Agentic Vulnerability
+## 🛡️ Overview
 
-As AI agents execute third-party "tools" or "skills," they inherently trust external code. These tools often harbor severe security vulnerabilities:
-- **Hardcoded API keys** leaked via debug prints.
-- **Environment variables** exposed during crash traces.
-- **Unsafe network calls** resulting in data exfiltration.
+Agentic AI systems frequently execute third-party "tools" or "skills." These tools often contain security vulnerabilities, such as hardcoded API keys, debug prints leaking environment variables, or unsafe network calls. When an agent executes these tools, the sensitive output is captured and injected into the LLM’s context history, exposing production credentials to third-party model providers.
 
-When an agent executes these compromised tools, sensitive output is captured and injected directly into the LLM context window, exposing your production credentials to third-party model providers.
+**AegisShield** is a production-grade security auditing and runtime protection layer designed specifically to neutralize the risk of credential leakage and data exfiltration before they reach the LLM context window.
 
-## The Solution: AegisShield
+## ✨ Features
 
-**AegisShield** is a production-ready security auditing and runtime protection layer built to neutralize credential leakage and data exfiltration before they ever reach the LLM context window. 
+- **Pre-Install Auditor:** Static regex and AST passes detect debug prints leaking env vars, hard-coded credentials, wallet keys, and unsafe network/subprocess calls.
+- **Real-Time Wrapper & Redaction:** Intercepts tool outputs at runtime, redacting secrets (e.g., `[REDACTED by AegisShield]`) before they reach the model context. Sub-40ms overhead.
+- **Governance & Compliance:** Maps findings to governance policies, enforcing org-wide allowlists with an audit-ready ledger.
+- **Scan History Dashboard:** Persistent local history with risk trend sparklines.
+- **Export Audit Reports:** Download compliance-ready JSON audit trails.
+- **Pixel-Perfect UI:** High-density enterprise SaaS dashboard with canvas-based constellation animations and SVG risk gauges.
 
-We provide a zero-trust wrapper that sanitizes tool outputs in microseconds, ensuring your agents remain powerful without compromising your organization's security posture.
-
----
-
-## System Architecture
+## 🧠 System Architecture (AI-Enhanced)
 
 ```mermaid
 graph TD
@@ -69,155 +62,94 @@ graph TD
     H -->|Analyze Findings| K(AI Executive Summary)
 ```
 
----
-
-## Key Capabilities
-
-### Pre-Install Static Auditor
-Perform deep inspection of any third-party skill before it runs.
-- **Regex & AST Analysis:** Instantly detects hard-coded credentials, wallet keys, and exposed configuration references.
-- **Dependency Scanning:** Flags unsafe subprocess executions and unverified network requests.
-
-### Runtime Wrapper & Redaction
-An invisible shield for your LLM context.
-- **Live Sanitization:** Intercepts tool outputs at runtime, replacing secrets with standardized redaction markers.
-- **Low Latency:** Engineered for high-throughput AI pipelines with sub-40ms overhead.
-
-### Governance & Compliance Ledger
-Enterprise-ready audit trails for Security Operations teams.
-- **Policy Enforcement:** Map findings to organizational governance policies with strict allow/deny lists.
-- **Immutable History:** Persistent local scan history with risk trend analytics and exportable JSON audit reports.
-
-### High-Density Security Dashboard
-A professional, metrics-driven interface.
-- Features deep drill-down analytics into vulnerability line numbers, evidence snippets, and risk distributions.
-
----
-
-## Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js** 18.17 or higher
-- Package manager (npm, yarn, or pnpm)
+
+- Node.js 18.17 or later
+- npm, yarn, or pnpm
 
 ### Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/aegis-scanner.git
-cd aegis-scanner
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/aegis-scanner.git
+   cd aegis-scanner
+   ```
 
-# Install dependencies
-npm install
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-# Launch the security dashboard
-npm run dev
-```
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-> **Access the Dashboard:** Open [http://localhost:3000](http://localhost:3000) in your browser to start auditing.
+4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
----
+## 💻 Usage
 
-## Usage
+### Dashboard
 
-### Interactive Dashboard
-- **Drag & Drop:** Instantly scan source files or archives by dropping them into the target zone.
-- **Repository Integration:** Paste any public repository URL for a comprehensive vulnerability scan.
-- **Remediation:** View detailed vulnerability breakdowns, including exact line numbers and actionable fixes.
+The main dashboard provides an intuitive interface for scanning skills:
+1. **Drag & Drop:** Drop a `.py`, `.js`, or `.zip` file directly into the input zone.
+2. **GitHub URL:** Paste a public GitHub repository URL to scan the entire project automatically.
+3. **Review Findings:** Examine the risk score and detailed findings, including exact line numbers, evidence snippets, and suggested fixes.
 
-### Runtime Wrapper Simulator
-Test the redaction engine directly in the browser:
-- Click **Apply Wrapper**.
-- Paste simulated raw output or load from a recent scan.
-- Click **Run Wrapper** to witness real-time secret sanitization and latency metrics.
+### Runtime Wrapper Modal
 
----
+Test the live redaction engine directly in the UI:
+1. Click **Apply Wrapper**.
+2. Paste any simulated tool output containing secrets (or click **Load from scan**).
+3. Click **Run wrapper** to see the redacted output and performance metrics.
 
-## API Integration
+## 🔌 API Reference
 
-Seamlessly integrate AegisShield into your existing agent pipelines.
+Integrate AegisShield directly into your AI agent pipelines.
 
 ### `POST /api/wrapper/redact`
-Sanitize tool outputs before feeding them back to your LLM.
+
+Redacts secrets from text before feeding it back to the LLM.
 
 **Request:**
 ```bash
 curl -X POST http://localhost:3000/api/wrapper/redact \
   -H 'Content-Type: application/json' \
-  -d '{"text": "Connecting to DB... DEBUG: DATABASE_URL=postgres://user:pass@localhost:5432/db"}'
+  -d '{"text": "DEBUG: API_KEY=dummy_fake_key_1234567890abcdef"}'
 ```
 
 **Response:**
 ```json
 {
-  "output": "Connecting to DB... DEBUG: DATABASE_URL=[REDACTED by AegisShield]",
+  "output": "DEBUG: API_KEY=[REDACTED by AegisShield]",
   "redactions": 1,
-  "output_chars": 67,
-  "input_chars": 84,
-  "latency_ms": 12
+  "output_chars": 40,
+  "input_chars": 51
 }
 ```
 
----
+### `POST /api/scan/file`
 
-## AI Framework Integration
+Scan a file upload (multipart/form-data).
 
-AegisShield acts as a zero-trust middleware between your tool executions and the LLM context. 
+### `POST /api/scan/url`
 
-### Python / LangChain Example
-
-Wrap your existing tools with AegisShield before returning data to the agent:
-
-```python
-import requests
-from langchain.tools import tool
-
-def aegis_shield_wrapper(tool_output: str) -> str:
-    response = requests.post(
-        "http://localhost:3000/api/wrapper/redact", 
-        json={"text": tool_output}
-    )
-    return response.json().get("output", tool_output)
-
-@tool
-def execute_unsafe_query(query: str) -> str:
-    """Executes a local command or query."""
-    raw_output = run_local_task(query)
-    
-    # 🛡️ Sanitize the output before returning to the LLM
-    return aegis_shield_wrapper(raw_output)
+Scan a public GitHub repository.
+```json
+{
+  "url": "https://github.com/owner/repo"
+}
 ```
 
-### OpenAI Function Calling (Native)
+## 🛠️ Technology Stack
 
-When processing OpenAI tool calls, pipe the function result through AegisShield before appending the `tool` message back to your history:
+- **Framework:** [Next.js 16](https://nextjs.org/) (App Router)
+- **Styling:** [Tailwind CSS 4](https://tailwindcss.com/) + Custom Design System
+- **Animations:** HTML5 Canvas (GPU-efficient sprites), CSS Animations, Intersection Observer
+- **Fonts:** Inter & JetBrains Mono
 
-```python
-# 1. Execute the requested tool locally
-raw_result = execute_tool(tool_call.function.name, args)
+## 📄 License
 
-# 2. 🛡️ Sanitize the output with AegisShield
-safe_result = aegis_shield_wrapper(raw_result)
-
-# 3. Return the sanitized context to the LLM
-messages.append({
-    "role": "tool",
-    "tool_call_id": tool_call.id,
-    "content": safe_result
-})
-```
-
----
-
-## Technology Stack
-
-- **Core:** [Next.js 16](https://nextjs.org/)
-- **Styling:** [Tailwind CSS](https://tailwindcss.com/) with an Enterprise Design System
-- **Visuals:** HTML5 Canvas, CSS Micro-animations, Intersection Observers
-- **Typography:** Inter (UI) & JetBrains Mono (Code)
-
----
-
-## License
-
-AegisShield is open-source software licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

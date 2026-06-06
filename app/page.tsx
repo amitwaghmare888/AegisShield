@@ -9,7 +9,7 @@ interface Finding {
   id: string;
   category: string;
   severity: 'critical' | 'high' | 'warning' | 'info';
-  source: 'static' | 'ast';
+  source: 'static' | 'ast' | 'ai';
   file: string;
   line: number;
   snippet: string;
@@ -28,6 +28,7 @@ interface ScanPayload {
   duration_ms: number;
   label: string;
   can_download: boolean;
+  raw_content?: string;
 }
 
 interface HistoryEntry {
@@ -51,7 +52,7 @@ function esc(s: string | null | undefined): string {
 
 const SEV_LABEL: Record<string, string> = { critical: 'Critical', high: 'High', warning: 'Warn', info: 'Info' };
 const SEV_PILL: Record<string, string> = { critical: 'sev-high', high: 'sev-high', warning: 'sev-warn', info: 'sev-info' };
-const SRC_LABEL: Record<string, string> = { static: 'Static', ast: 'AST' };
+const SRC_LABEL: Record<string, string> = { static: 'Static', ast: 'AST', ai: 'AI' };
 const RANK: Record<string, number> = { critical: 4, high: 3, warning: 2, info: 1 };
 
 /* ═══════════════════════════════════════════════════
@@ -144,6 +145,22 @@ export default function Home() {
   const [contactCompany, setContactCompany] = useState('');
   const [contactMessage, setContactMessage] = useState('');
 
+  // AI Auto-Fix State
+  const [aiFixes, setAiFixes] = useState<Record<string, string>>({});
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+
+  // AI Deep Scan State
+  const [aiDeepFindings, setAiDeepFindings] = useState<Finding[]>([]);
+  const [aiDeepLoading, setAiDeepLoading] = useState(false);
+  const [aiDeepDone, setAiDeepDone] = useState(false);
+
+  // AI Threat Summary State
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+
+  // AI Smart Redaction State
+  const [aiRedactLoading, setAiRedactLoading] = useState(false);
+
   // Stats
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
@@ -153,6 +170,7 @@ export default function Home() {
   const urlRef = useRef<HTMLInputElement>(null);
   const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scanT0Ref = useRef(0);
+  const rawCodeRef = useRef<string>(''); // stores last scanned source for AI deep scan
 
   /* ── Toast helper ── */
   const flash = useCallback((message: string, type: ToastType = 'info') => {
@@ -184,6 +202,123 @@ export default function Home() {
       return next;
     });
   };
+
+  /* ── AI Auto-Fix Handler ── */
+  async function generateAiFix(f: Finding) {
+    setAiLoading(prev => ({ ...prev, [f.id]: true }));
+    flash('Generating AI fix...', 'info');
+    
+    try {
+      const r = await fetch('/api/ai/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          findingId: f.id,
+          snippet: f.snippet,
+          message: f.message,
+          file: f.file,
+          line: f.line
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Failed to generate fix');
+      
+      setAiFixes(prev => ({ ...prev, [f.id]: data.fix }));
+      flash('AI fix generated successfully', 'success');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown AI error';
+      flash(`AI Fix Failed: ${msg}`, 'error');
+    } finally {
+      setAiLoading(prev => ({ ...prev, [f.id]: false }));
+    }
+  }
+
+  /* ── AI Deep Scan Handler ── */
+  async function runAiDeepScan() {
+    if (!currentScan) return;
+    setAiDeepLoading(true); setAiDeepDone(false); setAiDeepFindings([]);
+    flash('AI Deep Scan — analyzing code semantics...', 'info');
+    try {
+      // Use the stored raw source code; fall back to concatenated snippets if unavailable
+      const codeToScan = rawCodeRef.current || currentScan.findings.map(f => f.snippet).join('\n');
+      const r = await fetch('/api/ai/scan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeToScan, filename: currentScan.label }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'AI scan failed');
+      const mapped: Finding[] = (data.findings || []).map(
+        (af: { id?: string; category?: string; severity?: string; file?: string; line?: number; snippet?: string; message?: string; suggested_fix?: string; confidence?: number }) => ({
+          id: String(af.id || 'AI_UNKNOWN'),
+          category: String(af.category || 'AI Analysis'),
+          severity: (['critical', 'high', 'warning', 'info'].includes(af.severity || '') ? af.severity : 'warning') as Finding['severity'],
+          source: 'ai' as const,
+          file: String(af.file || currentScan!.label),
+          line: Number(af.line) || 0,
+          snippet: String(af.snippet || ''),
+          message: String(af.message || '') + (af.confidence ? ` (AI confidence: ${af.confidence}%)` : ''),
+          suggested_fix: String(af.suggested_fix || ''),
+          weight: af.severity === 'critical' ? 30 : af.severity === 'high' ? 20 : af.severity === 'warning' ? 12 : 4,
+        })
+      );
+      setAiDeepFindings(mapped); setAiDeepDone(true);
+      flash(mapped.length > 0 ? `AI Deep Scan found ${mapped.length} additional vulnerabilities` : 'AI Deep Scan complete — no additional issues found', mapped.length > 0 ? 'warning' : 'success');
+    } catch (e: unknown) {
+      flash(`AI Deep Scan failed: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error'); setAiDeepDone(true);
+    } finally { setAiDeepLoading(false); }
+  }
+
+  /* ── AI Threat Summary Handler ── */
+  async function generateAiSummary() {
+    if (!currentScan) return;
+    setAiSummaryLoading(true); setAiSummary('');
+    flash('Generating AI threat summary...', 'info');
+    try {
+      const allF = [...(currentScan.findings || []), ...aiDeepFindings];
+      const r = await fetch('/api/ai/summary', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findings: allF, riskScore: currentScan.risk_score, label: currentScan.label, fileCount: currentScan.files_scanned }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Summary generation failed');
+      setAiSummary(data.summary);
+      flash('AI threat summary generated', 'success');
+    } catch (e: unknown) {
+      flash(`AI Summary failed: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    } finally { setAiSummaryLoading(false); }
+  }
+
+  /* ── AI Smart Redaction Handler ── */
+  async function runAiRedact() {
+    if (!wrapInput.trim()) { setWrapSummary('Paste something to redact first'); return; }
+    setAiRedactLoading(true);
+    setWrapSummary('AI analyzing context...');
+    setWrapOutputHtml('<span style="color:var(--text-dim)">AI is analyzing context and redacting...</span>');
+    try {
+      const t0 = performance.now();
+      const r = await fetch('/api/ai/redact', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: wrapInput }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const ms = Math.max(1, Math.round(performance.now() - t0));
+      setWrapOutput(j.output);
+      const safe = esc(j.output);
+      const highlighted = safe.replace(/\[REDACTED\]/g, '<mark>[REDACTED]</mark>');
+      setWrapOutputHtml(highlighted || '<span style="color:var(--text-dim)">(empty)</span>');
+      setWrapOutStat(`${j.output_chars} chars`);
+      if (j.redactions > 0) {
+        setWrapSummary(`AI: ${j.redactions} secret${j.redactions === 1 ? '' : 's'} redacted — ${ms} ms`);
+      } else {
+        setWrapSummary(`AI: Clean — no secrets detected — ${ms} ms`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'unknown';
+      setWrapOutputHtml(`<span style="color:#ff7676">AI redaction failed — ${esc(msg)}</span>`);
+      setWrapSummary('AI redaction failed');
+    } finally { setAiRedactLoading(false); }
+  }
 
   /* ── Scroll reveal ── */
   useEffect(() => {
@@ -495,11 +630,14 @@ export default function Home() {
       : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
     setDropSub(kb + ' · ready to scan');
 
-    flash('Uploading ' + file.name + '…', 'info');
+    flash('Uploading ' + file.name + '...', 'info');
     resetGauge();
     setCurrentScan(null);
     setShowAllFindings(false);
     setIsScanning(true);
+
+    // Store raw source for AI deep scan
+    rawCodeRef.current = await file.text();
 
     const fd = new FormData();
     fd.append('file', file);
@@ -524,10 +662,11 @@ export default function Home() {
       urlRef.current?.focus();
       return;
     }
-    flash('Scanning ' + u + '…', 'info');
+    flash('Scanning ' + u + '...', 'info');
     resetGauge();
     setCurrentScan(null);
     setShowAllFindings(false);
+    rawCodeRef.current = ''; // URL scans are multi-file; AI scan will use snippet context
     setIsScanning(true);
 
     try {
@@ -536,7 +675,14 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: u }),
       });
-      if (!r.ok) throw new Error(await r.text() || ('HTTP ' + r.status));
+      if (!r.ok) {
+        let errStr = await r.text();
+        try {
+          const errObj = JSON.parse(errStr);
+          if (errObj.error) errStr = errObj.error;
+        } catch { /* ignore */ }
+        throw new Error(errStr || ('HTTP ' + r.status));
+      }
       const payload: ScanPayload = await r.json();
       setIsScanning(false);
       applyScanPayload(payload);
@@ -557,6 +703,7 @@ export default function Home() {
   function applyScanPayload(p: ScanPayload) {
     setCurrentScan(p);
     setShowAllFindings(false);
+    setAiDeepFindings([]); setAiDeepDone(false); setAiSummary('');
     const counts = p.counts || { critical: 0, high: 0, warning: 0, info: 0 };
     const totalHigh = (counts.high || 0) + (counts.critical || 0);
     runGauge(p.risk_score || 0, { high: totalHigh, warn: counts.warning || 0, info: counts.info || 0 });
@@ -585,7 +732,6 @@ export default function Home() {
     }, 200);
   }
 
-  /* ── Export audit report ── */
   function exportAudit() {
     if (!currentScan) return;
     const report = {
@@ -611,11 +757,16 @@ export default function Home() {
         weight: f.weight,
       })),
     };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const jsonStr = JSON.stringify(report, null, 2);
+    // Add UTF-8 BOM for universal compatibility
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const encoder = new TextEncoder();
+    const content = encoder.encode(jsonStr);
+    const blob = new Blob([bom, content], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `aegisshield-audit-${Date.now()}.json`;
+    a.download = `aegisshield-audit-${currentScan.label.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -643,7 +794,7 @@ export default function Home() {
       const ms = Math.max(1, Math.round(performance.now() - t0));
       setWrapOutput(j.output);
       const safe = esc(j.output);
-      const highlighted = safe.replace(/\[REDACTED by AegisShield\]/g, '<mark>[REDACTED by AegisShield]</mark>');
+      const highlighted = safe.replace(/\[REDACTED\]/g, '<mark>[REDACTED]</mark>');
       setWrapOutputHtml(highlighted || '<span style="color:var(--text-dim)">(empty)</span>');
       setWrapOutStat(`${j.output_chars} chars`);
       if (j.redactions > 0) {
@@ -977,6 +1128,12 @@ export default function Home() {
                     Export Audit
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></svg>
                   </button>
+                  <button className="btn ai-btn" onClick={runAiDeepScan} disabled={aiDeepLoading}>
+                    {aiDeepLoading ? 'AI Scanning...' : 'AI Deep Scan'}
+                  </button>
+                  <button className="btn ai-btn" onClick={generateAiSummary} disabled={aiSummaryLoading}>
+                    {aiSummaryLoading ? 'AI Generating...' : 'AI Summary'}
+                  </button>
                 </div>
               </div>
 
@@ -1013,9 +1170,31 @@ export default function Home() {
                           <p className="why">{f.message}{f.weight ? <span className="neon"> Severity weight: +{f.weight}</span> : null}</p>
                         </div>
                         {f.suggested_fix && (
-                          <div>
-                            <div className="lbl">Suggested fix</div>
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="lbl m-0">Suggested fix</div>
+                              <button 
+                                onClick={() => generateAiFix(f)} 
+                                disabled={aiLoading[f.id]}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[var(--neon)] text-[#020608] text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                              >
+                                {aiLoading[f.id] ? 'Generating...' : 'Auto-Fix with AI'}
+                              </button>
+                            </div>
                             <pre className="code compact">{f.suggested_fix}</pre>
+                          </div>
+                        )}
+                        {aiFixes[f.id] && (
+                          <div className="mt-4 p-4 rounded bg-[#0a1215] border border-[var(--neon)]/30">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="lbl m-0 flex items-center gap-2">
+                                <span className="text-[var(--neon)]">AI Generated Fix</span>
+                              </div>
+                              <CopyBtn text={aiFixes[f.id]} label="Copy Fix" />
+                            </div>
+                            <pre className="code compact" style={{ background: '#020608' }}>
+                              <span className="hl">{aiFixes[f.id]}</span>
+                            </pre>
                           </div>
                         )}
                       </div>
@@ -1038,6 +1217,86 @@ export default function Home() {
                       Show all {allFindings.length} findings →
                     </span>
                   )}
+                </div>
+              )}
+
+              {/* ── AI Deep Scan Results ── */}
+              {aiDeepLoading && (
+                <div className="mt-8 p-6 rounded-xl border border-[color:var(--neon)]/20 text-center ai-loading-card">
+                  <div className="text-[color:var(--neon)] text-lg ai-pulse">AI Deep Scan in progress...</div>
+                  <div className="text-[12px] mt-2" style={{ color: 'var(--text-dim)' }}>Analyzing code semantics with Gemini</div>
+                </div>
+              )}
+
+              {aiDeepDone && aiDeepFindings.length > 0 && (
+                <div className="mt-10">
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="num-tag ai-tag">[ AI DEEP SCAN ]</span>
+                    <span className="text-[12.5px] font-mono" style={{ color: 'var(--text-dim)' }}>
+                      {aiDeepFindings.length} semantic vulnerabilities detected
+                    </span>
+                  </div>
+                  <div className="grid gap-4">
+                    {aiDeepFindings.map((f, i) => (
+                      <article key={`ai-${f.id}-${f.line}-${i}`} className="finding ai-finding">
+                        <header>
+                          <span className={`pill ${SEV_PILL[f.severity] || 'sev-info'}`}>{SEV_LABEL[f.severity] || f.severity}</span>
+                          <span className="pill src ai-src">AI</span>
+                          <span className="file">{f.file}<span className="ln">:{f.line}</span></span>
+                          <span className="rule">{f.id}</span>
+                          <CopyBtn text={f.snippet} label="Copy" />
+                        </header>
+                        <div className="body">
+                          {f.snippet && (
+                            <div>
+                              <div className="lbl">Evidence</div>
+                              <pre className="code compact"><span className="hl">{f.snippet}</span></pre>
+                            </div>
+                          )}
+                          <div>
+                            <div className="lbl">AI Analysis</div>
+                            <p className="why">{f.message}{f.weight ? <span className="neon"> Severity weight: +{f.weight}</span> : null}</p>
+                          </div>
+                          {f.suggested_fix && (
+                            <div className="mt-3">
+                              <div className="lbl">AI Suggested Fix</div>
+                              <pre className="code compact">{f.suggested_fix}</pre>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiDeepDone && aiDeepFindings.length === 0 && (
+                <div className="mt-8 p-6 rounded-xl border border-[color:var(--neon)]/20 text-center">
+                  <div className="text-[color:var(--neon)] text-lg mb-2">AI Deep Scan Complete</div>
+                  <div className="text-[13px]" style={{ color: 'var(--text-mute)' }}>No additional semantic vulnerabilities detected beyond the static analysis.</div>
+                </div>
+              )}
+
+              {/* ── AI Threat Summary ── */}
+              {aiSummaryLoading && (
+                <div className="mt-8 p-6 rounded-xl border border-[color:var(--neon)]/20 text-center ai-loading-card">
+                  <div className="text-[color:var(--neon)] text-lg ai-pulse">Generating Threat Summary...</div>
+                </div>
+              )}
+
+              {aiSummary && (
+                <div className="mt-8 card ai-summary-card">
+                  <div className="card-pad">
+                    <div className="flex items-center justify-between mb-5">
+                      <span className="num-tag ai-tag">[ AI THREAT SUMMARY ]</span>
+                      <CopyBtn text={aiSummary} label="Copy Summary" />
+                    </div>
+                    <div className="ai-summary-text">
+                      {aiSummary.split('\n').map((line, i) => (
+                        line.trim() ? <p key={i} className="mb-3 text-[13.5px] leading-relaxed" style={{ color: 'var(--text-mute)' }}>{line}</p> : <br key={i} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1120,7 +1379,7 @@ export default function Home() {
                 <h3 className="text-white text-[19px] font-medium tracking-tight">Real-Time Wrapper &amp; Redaction</h3>
                 <p className="mt-3 text-[14px] leading-relaxed" style={{ color: 'var(--text-mute)' }}>
                   An API endpoint runs every tool output through the same regex ruleset as the auditor.
-                  Matched secrets are replaced with <span className="font-mono text-[12.5px]" style={{ color: 'var(--text)' }}>[REDACTED by AegisShield]</span> before they reach your model context.
+                  Matched secrets are replaced with <span className="font-mono text-[12.5px]" style={{ color: 'var(--text)' }}>[REDACTED]</span> before they reach your model context.
                 </p>
                 <ul className="mt-7 space-y-2.5 text-[13px]" style={{ color: 'var(--text-mute)' }}>
                   <li className="flex gap-3"><span style={{ color: 'var(--neon)' }}>›</span> Pattern + entropy + custom regex detectors</li>
@@ -1374,20 +1633,15 @@ export default function Home() {
                     setWrapSummary('Idle');
                   }}>Clear</button>
                   <button className="btn btn-primary" onClick={runWrapper}>
-                    <span className="dot" /> Run wrapper
+                    Run wrapper
+                  </button>
+                  <button className="btn ai-btn" onClick={runAiRedact} disabled={aiRedactLoading}>
+                    {aiRedactLoading ? 'AI Analyzing...' : 'AI Redact'}
                   </button>
                 </div>
               </div>
 
-              <div className="modal-snippet">
-                <span className="c"># Wire your agent at it directly:</span><br />
-                <span className="k">curl</span> -X POST http://localhost:3000/api/wrapper/redact \<br />
-                &nbsp;&nbsp;-H <span className="k">&apos;content-type: application/json&apos;</span> \<br />
-                &nbsp;&nbsp;-d <span className="k">&apos;{`{"text": "<your tool output>"}`}&apos;</span>
-                <div style={{ marginTop: '8px' }}>
-                  <CopyBtn text={`curl -X POST http://localhost:3000/api/wrapper/redact \\\n  -H 'content-type: application/json' \\\n  -d '{"text": "<your tool output>"}'`} label="Copy snippet" />
-                </div>
-              </div>
+
             </div>
           </div>
         </div>

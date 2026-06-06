@@ -746,6 +746,75 @@ html, body {
 /* ─── Hidden helper ─── */
 .is-hidden { display: none !important; }
 
+/* ─── AI Feature Styles ─── */
+.ai-btn {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(77, 139, 255, 0.15));
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #c4b5fd;
+}
+.ai-btn:hover {
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #e9e0ff;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 0 24px rgba(139, 92, 246, 0.25);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(77, 139, 255, 0.20));
+}
+.ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ai-tag {
+  color: #a78bfa !important;
+  text-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
+
+.ai-finding {
+  border-color: rgba(139, 92, 246, 0.25);
+  background: linear-gradient(135deg, var(--ink-card), rgba(139, 92, 246, 0.04));
+}
+.ai-finding:hover {
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.12), 0 0 30px rgba(139, 92, 246, 0.08);
+}
+
+.ai-src {
+  color: #a78bfa !important;
+  border-color: rgba(139, 92, 246, 0.45) !important;
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.ai-summary-card {
+  border-color: rgba(139, 92, 246, 0.25);
+  background: linear-gradient(135deg, var(--ink-card), rgba(139, 92, 246, 0.04));
+}
+.ai-summary-card:hover {
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.12), 0 0 30px rgba(139, 92, 246, 0.08);
+}
+.ai-summary-text p {
+  color: var(--text-mute);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.ai-pulse {
+  animation: ai-pulse-glow 1.8s ease-in-out infinite;
+}
+@keyframes ai-pulse-glow {
+  0%, 100% { opacity: 1; text-shadow: 0 0 8px rgba(139, 92, 246, 0.3); }
+  50%      { opacity: 0.6; text-shadow: 0 0 16px rgba(139, 92, 246, 0.5); }
+}
+
+.ai-loading-card {
+  background: linear-gradient(135deg, var(--ink-card), rgba(139, 92, 246, 0.06));
+  animation: ai-card-breathe 2.5s ease-in-out infinite;
+}
+@keyframes ai-card-breathe {
+  0%, 100% { border-color: rgba(139, 92, 246, 0.15); box-shadow: 0 0 20px rgba(139, 92, 246, 0.05); }
+  50%      { border-color: rgba(139, 92, 246, 0.35); box-shadow: 0 0 30px rgba(139, 92, 246, 0.12); }
+}
+
 /* ─── Reduced motion ─── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
